@@ -46,6 +46,8 @@
   .themebtn:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
   #timeline { max-height: 30vh; overflow-y: auto; padding: 0 12px; }
   #timeline svg { display: block; width: 100%; }
+  #timeline.single { max-height: none; overflow-x: auto; overflow-y: hidden; }
+  #timeline.single svg { width: auto; max-width: none; }
   .ch { cursor: pointer; outline: none; }
   .ch circle { fill: var(--surface); stroke: var(--line); stroke-width: 2; }
   .ch text { fill: var(--ink); font-size: 10px; text-anchor: middle; dominant-baseline: central; pointer-events: none;
@@ -75,8 +77,11 @@
   aside li b { font-weight: 600; }
   .empty { color: var(--muted); }
   @media (max-width: 760px) {
-    main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-    aside { border-left: 0; max-height: 36vh; }
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+    #cy { min-height: 220px; }
+    aside { border-left: 0; min-height: 120px; max-height: 38vh; }
+    .legend { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+    .legend button { flex: none; white-space: nowrap; }
   }
 </style>
 </head>
@@ -302,10 +307,17 @@ NODES.forEach(n => { eventChapters.add(n.from); if (n.died != null) eventChapter
 EDGES.forEach(e => { eventChapters.add(e.from); if (e.until != null) eventChapters.add(e.until); });
 eventChapters.delete(1);
 
+const narrow = matchMedia("(max-width: 760px)");
+let tlKey = "";
+
+// Wide screens: the chapters fold into rows. Narrow screens: one long row you scroll sideways.
 function drawTimeline() {
-  const W = Math.max(tl.clientWidth - 24, 260);
+  const single = narrow.matches;
+  tl.classList.toggle("single", single);
+  tlKey = window.innerWidth + "-" + single;
   const gap = 34, pad = 28, rh = 36, top = 20;
-  const per = Math.max(6, Math.floor((W - 2 * pad) / gap) + 1);
+  const W = single ? 2 * pad + (TOTAL - 1) * gap : Math.max(tl.clientWidth - 24, 260);
+  const per = single ? TOTAL : Math.max(6, Math.floor((W - 2 * pad) / gap) + 1);
   const ox = (W - (2 * pad + (per - 1) * gap)) / 2 + pad;
   const rows = Math.ceil(TOTAL / per);
   const H = top * 2 + (rows - 1) * rh;
@@ -323,7 +335,7 @@ function drawTimeline() {
       <circle cx="${p.x}" cy="${p.y}" r="11"></circle>
       <text x="${p.x}" y="${p.y}">${p.c}</text>
       <title>${chapterName(p.c)}</title></g>`).join("");
-  tl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" preserveAspectRatio="xMidYMin meet">
+  tl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="xMidYMin meet">
     <path d="${d}" fill="none" stroke="var(--line)" stroke-width="2"></path>${circles}</svg>`;
   updateTimeline();
 }
@@ -336,6 +348,10 @@ function updateTimeline() {
     g.classList.toggle("event", eventChapters.has(c));
     g.querySelector("circle").setAttribute("r", c === current ? 13 : 11);
   });
+  if (tl.classList.contains("single")) {
+    const cur = tl.querySelector(".ch.now circle");
+    if (cur) tl.scrollTo({ left: Number(cur.getAttribute("cx")) - tl.clientWidth / 2, behavior: reduceMotion ? "auto" : "smooth" });
+  }
 }
 
 tl.addEventListener("click", e => {
@@ -345,7 +361,9 @@ tl.addEventListener("keydown", e => {
   const g = e.target.closest(".ch");
   if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setChapter(Number(g.dataset.ch)); }
 });
-new ResizeObserver(() => drawTimeline()).observe(tl);
+window.addEventListener("resize", () => {
+  if (tlKey !== window.innerWidth + "-" + narrow.matches) drawTimeline();
+});
 
 /* ===== 7. CHAPTER CHANGE ===== */
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
