@@ -136,7 +136,11 @@ const NODES = [
   { id: "fare",      name: "Farebrother",        desc: "", from: 17 },
   { id: "will",      name: "Will Ladislaw",      desc: "", from: 21 },
   { id: "caleb",     name: "Caleb Garth",        desc: "", from: 24 },
-  { id: "susan",     name: "Susan Garth",        desc: "", from: 24 }
+  { id: "susan",     name: "Susan Garth",        desc: "", from: 24 },
+  { id: "mrsvincy",  name: "Mrs. Vincy",         desc: "", from: 11 },
+  { id: "mrvincy",   name: "Mr. Vincy",          desc: "", from: 11 },
+  { id: "rigg",      name: "Joshua Rigg",        desc: "", from: 35 },
+  { id: "raffles",   name: "John Raffles",       desc: "", from: 41 , died: 70}
 ];
 
 const POSITIONS = {
@@ -184,9 +188,21 @@ const EDGES = [
   { a: "celia",    b: "chettam",   type: "marriage", from: 34, note: "" },
   { a: "dorothea", b: "lydgate",   type: "friend",   from: 30, note: "" },
   { a: "lydgate",  b: "rosamond",  type: "marriage", from: 40, note: "" },
+  { a: "lydgate",  b: "fred",      type: "family",   from: 40, note: "" },
   { a: "casaubon", b: "will",      type: "conflict", from: 34, note: "" },
   { a: "brooke",   b: "will",      type: "work",     from: 30, note: "" },
-  { a: "caleb",    b: "fred",      type: "work",     from: 56, note: "" }
+  { a: "caleb",    b: "fred",      type: "work",     from: 56, note: "" },
+  { a: "mrvincy",  b: "fred",      type: "family",   from: 11, note: "" },
+  { a: "mrsvincy", b: "fred",      type: "family",   from: 11, note: "" },
+  { a: "mrvincy",  b: "mrsvincy",  type: "family",   from: 11, note: "" },
+  { a: "mrvincy",  b: "rosamond",  type: "family",   from: 11, note: "" },
+  { a: "mrsvincy", b: "rosamond",  type: "family",   from: 11, note: "" },
+  { a: "mrvincy",  b: "lydgate",   type: "family",   from: 40, note: "" },
+  { a: "mrsvincy", b: "lydgate",   type: "family",   from: 40, note: "" },
+  { a: "rigg",     b: "feather",   type: "family",   from: 35, note: "" },
+  { a: "rigg",     b: "raffles",   type: "family",   from: 41, note: "" },
+  { a: "raffles",  b: "bulstrode", type: "social",   from: 53, note: "" },
+  { a: "will",     b: "bulstrode", type: "family",   from: 53, note: "" },
 ];
 
 /* ===== 2. STATE HELPERS ===== */
