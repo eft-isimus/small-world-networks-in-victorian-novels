@@ -52,7 +52,7 @@
     outline: 2px solid var(--sel); outline-offset: 2px; }
   .themebtn { margin-left: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 50%;
     width: 34px; height: 34px; cursor: pointer; display: grid; place-items: center; padding: 0; flex: none; }
-  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); }
+  .pane { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); }
   .pane[hidden] { display: none; }
   .nhead { padding: 6px 20px 4px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; }
   h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
@@ -84,7 +84,8 @@
   .swatch.dotted { border-top-style: dotted; }
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 320px; }
   .cy { min-height: 300px; background: var(--surface); border-top: 1px solid var(--line); }
-  aside { padding: 18px 20px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); overflow-y: auto; }
+  aside { padding: 18px 20px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); overflow-y: auto;
+    display: flex; flex-direction: column; }
   aside h2 { margin: 0 0 6px; font-size: 1.25rem; font-weight: 600; }
   aside .role { margin: 0 0 12px; color: var(--muted); font-style: italic; }
   aside p { line-height: 1.55; margin: 0 0 12px; }
@@ -92,8 +93,27 @@
   aside li { margin: 0 0 6px; font-size: .92rem; }
   aside li b { font-weight: 600; }
   .empty { color: var(--muted); }
+  .math { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+  .math summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .math summary:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+  .mstat { margin: 8px 0 2px; }
+  .msub, .mnote { margin: 0 0 8px; color: var(--muted); font-size: .82rem; line-height: 1.4; }
+  .chart { display: block; width: 100%; height: auto; margin: 2px 0 8px; }
+  .chart text { fill: var(--muted); font-size: 9px; font-family: "Spectral", Georgia, serif; }
+  .chart .ct { fill: var(--ink); font-size: 10.5px; font-weight: 600; }
+  .chart .ax { stroke: var(--line); stroke-width: 1; }
+  .chart .ln { fill: none; stroke: var(--node); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .dot { fill: var(--sel); }
+  .jointcharts { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); width: min(560px, calc(100% - 24px));
+    pointer-events: none; padding: 6px 10px 2px; background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); border-radius: 8px; }
+  .jkey { display: flex; gap: 18px; justify-content: center; font-size: .82rem; margin-bottom: 2px; }
+  .jkey span { display: flex; align-items: center; gap: 6px; }
+  .jkey i { width: 24px; border-top: 3px solid var(--c); }
+  .jkey i.dash { border-top-style: dashed; }
+  .jgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .cmp { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
-  .cmpcol { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); color: var(--ink); }
+  .cmpcol { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); color: var(--ink); }
   .cmpcol + .cmpcol { border-left: 1px solid var(--line); }
   .cmpcol h2 { margin: 0; padding: 6px 16px; font-size: 1rem; font-weight: 600; }
   .cmpcol .cy { flex: 1; min-height: 0; }
@@ -128,6 +148,7 @@
       <section class="cmpcol" id="col-mm" data-novel="mm"><h2>Middlemarch · Chapter 71</h2><div class="cy" role="img" aria-label="Middlemarch network at chapter 71"></div></section>
       <section class="cmpcol" id="col-omf" data-novel="omf"><h2>Our Mutual Friend · Book 4, Chapter 11</h2><div class="cy" role="img" aria-label="Our Mutual Friend network at Book 4, Chapter 11"></div></section>
     </div>
+    <div class="jointcharts" id="jointCharts"></div>
   </section>
 </div>
 <script>
@@ -401,12 +422,67 @@ function grow(els) {
   });
 }
 
+/* ===== 3b. NETWORK MATH ===== */
+// State of the network at chapter c: characters present, links present (each pair counted once, all link types).
+// <k> = 2 x links / characters. <l> = mean shortest-path length over all pairs of characters that are connected.
+function graphStats(cfg, c) {
+  const nodes = cfg.nodes.filter(n => c >= n.from);
+  const idx = new Map(nodes.map((n, i) => [n.id, i]));
+  const adj = nodes.map(() => new Set());
+  cfg.edges.forEach(e => {
+    if (c < e.from || (e.until != null && c >= e.until)) return;
+    const i = idx.get(e.a), j = idx.get(e.b);
+    if (i === undefined || j === undefined) return;
+    adj[i].add(j); adj[j].add(i);
+  });
+  const N = nodes.length, E = adj.reduce((s, a) => s + a.size, 0) / 2;
+  let sum = 0, pairs = 0;
+  for (let s = 0; s < N; s++) {
+    const dist = new Array(N).fill(-1); dist[s] = 0;
+    const q = [s];
+    for (let h = 0; h < q.length; h++) {
+      const u = q[h];
+      adj[u].forEach(v => { if (dist[v] < 0) { dist[v] = dist[u] + 1; q.push(v); } });
+    }
+    for (let t = s + 1; t < N; t++) if (dist[t] > 0) { sum += dist[t]; pairs++; }
+  }
+  return { N, E, k: N ? 2 * E / N : null, l: pairs ? sum / pairs : null };
+}
+
+const ymaxOf = vals => Math.max(1, Math.ceil(Math.max(0, ...vals.filter(v => v != null)) * 2) / 2);
+
+// Line chart of vals[0..upto-1]; the y range is fixed to the whole series so the picture doesn't rescale.
+function chartSVG(title, vals, upto, ymax) {
+  const W = 240, H = 104, l = 30, r = 10, t = 22, b = 20, n = vals.length;
+  const x = i => l + (n > 1 ? (i / (n - 1)) * (W - l - r) : 0);
+  const y = v => t + (1 - v / ymax) * (H - t - b);
+  let d = "", pen = false;
+  for (let i = 0; i < upto; i++) {
+    const v = vals[i];
+    if (v == null) { pen = false; continue; }
+    d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+    pen = true;
+  }
+  const last = vals[upto - 1];
+  const dot = last == null ? "" : `<circle class="dot" cx="${x(upto - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3.2"/>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}, by chapter">
+    <text class="ct" x="${l}" y="12">${title}</text>
+    <line class="ax" x1="${l}" y1="${t}" x2="${l}" y2="${H - b}"/><line class="ax" x1="${l}" y1="${H - b}" x2="${W - r}" y2="${H - b}"/>
+    <text x="${l - 4}" y="${t + 3}" text-anchor="end">${ymax.toFixed(1)}</text><text x="${l - 4}" y="${H - b + 3}" text-anchor="end">0</text>
+    <text x="${l}" y="${H - 6}">1</text><text x="${(l + W - r) / 2}" y="${H - 6}" text-anchor="middle">chapters</text><text x="${W - r}" y="${H - 6}" text-anchor="end">${n}</text>
+    <path class="ln" d="${d}"/>${dot}</svg>`;
+}
+
 /* ===== 4. ONE NOVEL = ONE GRAPH (with timeline and panel when interactive) ===== */
 function createNovel(cfg, pane, interactive) {
   const total = cfg.chapters.length;
   const nodeById = Object.fromEntries(cfg.nodes.map(n => [n.id, n]));
   const $ = s => pane.querySelector(s);
   let current = interactive ? 1 : total, selected = null, fitted = false, tlKey = "";
+  const stats = Array.from({ length: total }, (_, i) => graphStats(cfg, i + 1));
+  const kSeries = stats.map(s => s.k), lSeries = stats.map(s => s.l);
+  const kMax = ymaxOf(kSeries), lMax = ymaxOf(lSeries);
+  const charts = upto => chartSVG("⟨k⟩ average degree", kSeries, upto, kMax) + chartSVG("⟨l⟩ average path length", lSeries, upto, lMax);
 
   const nodePresent = (n, c) => c >= n.from;
   const nodeDead = (n, c) => n.died != null && c >= n.died;
@@ -422,7 +498,8 @@ function createNovel(cfg, pane, interactive) {
       <div class="timeline" aria-label="Chapter timeline"></div>
       <div class="legend"></div>
       <main><div class="cy" role="img" aria-label="${esc(cfg.title)}"></div>
-        <aside class="info" aria-live="polite"></aside></main>`;
+        <aside class="info"><div class="infoBody" aria-live="polite"></div>
+          <details class="math"><summary>Math</summary><div class="mathBody"></div></details></aside></main>`;
   }
 
   const cy = cytoscape({
@@ -450,7 +527,7 @@ function createNovel(cfg, pane, interactive) {
   /* --- info panel --- */
   function refreshPanel() {
     if (!interactive) return;
-    const info = $(".info"), EMPTY = '<p class="empty">Select a character or a link to see details.</p>';
+    const info = $(".infoBody"), EMPTY = '<p class="empty">Select a character or a link to see details.</p>';
     if (!selected) { info.innerHTML = EMPTY; return; }
     if (selected.kind === "node") {
       const n = nodeById[selected.id];
@@ -527,6 +604,15 @@ function createNovel(cfg, pane, interactive) {
     }
   }
 
+  function updateMath() {
+    if (interactive) {
+      const s = stats[current - 1], f = v => v == null ? "–" : v.toFixed(2);
+      $(".mathBody").innerHTML = `<p class="mstat"><b>⟨k⟩</b> = ${f(s.k)} &nbsp;&nbsp; <b>⟨l⟩</b> = ${f(s.l)}</p>
+        <p class="msub">${s.N} characters, ${s.E} links in this chapter</p>${charts(current)}
+        <p class="mnote">⟨k⟩ = 2 × links ÷ characters. ⟨l⟩ = average shortest path between characters who are connected. Every link type counts, each pair once, and characters who have died stay in.</p>`;
+    }
+  }
+
   /* --- chapter change --- */
   function setChapter(c, animate = true) {
     current = Math.min(total, Math.max(1, c));
@@ -553,6 +639,7 @@ function createNovel(cfg, pane, interactive) {
       updateTimeline();
       refreshPanel();
     }
+    updateMath();
   }
 
   if (interactive) {
@@ -568,6 +655,7 @@ function createNovel(cfg, pane, interactive) {
 
   const api = {
     step: d => setChapter(current + d),
+    series: { k: kSeries, l: lSeries },
     setTypeHidden: (key, hide) => cy.edges(`[type="${key}"]`).toggleClass("hidden", hide),
     restyle: () => cy.style(buildStyle(pane)),
     show() {                                   // call when the tab becomes visible
@@ -613,6 +701,40 @@ buildLegend(document.getElementById("cmpLegend"), (key, hide) => {
   views.mmFinal.setTypeHidden(key, hide); views.omfFinal.setTypeHidden(key, hide);
 });
 
+// Side-by-side tab: both novels on one plot. The x axis is progress through each novel (they have different lengths).
+function jointChartSVG(title, list, ymax) {
+  const W = 260, H = 112, l = 30, r = 10, t = 22, b = 22;
+  const paths = list.map(s => {
+    const n = s.vals.length;
+    const x = i => l + (i / (n - 1)) * (W - l - r);
+    const y = v => t + (1 - v / ymax) * (H - t - b);
+    let d = "", pen = false, lastI = -1;
+    s.vals.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+      pen = true; lastI = i;
+    });
+    const dot = lastI < 0 ? "" : `<circle cx="${x(lastI).toFixed(1)}" cy="${y(s.vals[lastI]).toFixed(1)}" r="3" fill="${s.color}"/>`;
+    return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash}"` : ""}/>${dot}`;
+  }).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}, both novels">
+    <text class="ct" x="${l}" y="12">${title}</text>
+    <line class="ax" x1="${l}" y1="${t}" x2="${l}" y2="${H - b}"/><line class="ax" x1="${l}" y1="${H - b}" x2="${W - r}" y2="${H - b}"/>
+    <text x="${l - 4}" y="${t + 3}" text-anchor="end">${ymax.toFixed(1)}</text><text x="${l - 4}" y="${H - b + 3}" text-anchor="end">0</text>
+    <text x="${l}" y="${H - 6}">start</text><text x="${(l + W - r) / 2}" y="${H - 6}" text-anchor="middle">progress</text><text x="${W - r}" y="${H - 6}" text-anchor="end">end</text>
+    ${paths}</svg>`;
+}
+function renderJoint() {
+  const nodeColor = id => getComputedStyle(document.getElementById(id)).getPropertyValue("--node").trim();
+  const c1 = nodeColor("col-mm"), c2 = nodeColor("col-omf");
+  const mk = key => [{ vals: views.mm.series[key], color: c1 }, { vals: views.omf.series[key], color: c2, dash: "5 3" }];
+  const maxOf = key => ymaxOf([...views.mm.series[key], ...views.omf.series[key]]);
+  document.getElementById("jointCharts").innerHTML =
+    `<div class="jkey"><span><i style="--c:${c1}"></i>Middlemarch</span><span><i class="dash" style="--c:${c2}"></i>Our Mutual Friend</span></div>
+     <div class="jgrid">${jointChartSVG("⟨k⟩ average degree", mk("k"), maxOf("k"))}${jointChartSVG("⟨l⟩ average path length", mk("l"), maxOf("l"))}</div>`;
+}
+renderJoint();
+
 let activeTab = "mm";
 function showTab(id) {
   activeTab = id;
@@ -627,7 +749,7 @@ document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", ()
 document.getElementById("themeBtn").addEventListener("click", () =>
   applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true));
 sysDark.addEventListener("change", e => { if (!store(THEME_KEY)) applyTheme(e.matches ? "dark" : "light", false); });
-document.addEventListener("themechange", () => Object.values(views).forEach(v => v.restyle()));
+document.addEventListener("themechange", () => { Object.values(views).forEach(v => v.restyle()); renderJoint(); });
 window.addEventListener("resize", () => tabViews[activeTab].forEach(v => v.onResize()));
 document.addEventListener("keydown", e => {
   if (activeTab === "cmp") return;
